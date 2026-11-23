@@ -1,0 +1,109 @@
+:root {
+  --color-1: #ffffff;
+  --color-2: #fff4e6;
+  --color-3: #ffd6e0;
+  --color-4: #c3b1e1;
+  --color-5: #4a4e69;
+
+  /* Surfaces (60% dominante: blanco puro y crema cálida) */
+  --bg-canvas: var(--color-2);
+  --bg-surface: var(--color-1);
+  --bg-subtle: var(--color-2);
+  --bg-image: var(--color-2);
+
+  /* Ink & Structure (30% secundario: pizarra índigo #4A4E69) */
+  --ink-primary: var(--color-5);
+  --ink-secondary: rgba(74, 78, 105, 0.78);
+  --ink-muted: rgba(74, 78, 105, 0.56);
+  --border-subtle: rgba(74, 78, 105, 0.12);
+  --border-strong: rgba(74, 78, 105, 0.24);
+  --border-accent: rgba(195, 177, 225, 0.65);
+
+  /* Accents (10% acento: rosado pastel #FFD6E0 y lavanda #C3B1E1) */
+  --accent-pink: var(--color-3);
+  --accent-lavender: var(--color-4);
+  --accent-slate: var(--color-5);
+
+  /* Typography */
+  --font-sans:
+    'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-editorial: 'Playfair Display', Georgia, 'Times New Roman', serif;
+
+  /* Radii & Shadows */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 9999px;
+
+  --shadow-card: 0 4px 20px -4px rgba(74, 78, 105, 0.08), 0 1px 3px rgba(74, 78, 105, 0.05);
+  --shadow-card-hover:
+    0 18px 38px -12px rgba(195, 177, 225, 0.42), 0 6px 16px -4px rgba(74, 78, 105, 0.1);
+  --shadow-drawer: -16px 0 48px rgba(74, 78, 105, 0.18);
+  --shadow-modal: 0 24px 60px -12px rgba(74, 78, 105, 0.24);
+
+  /* Layout */
+  --container-max: 1240px;
+  --header-height: 72px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-5);
+  outline-offset: 2px;
+}
