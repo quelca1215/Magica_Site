@@ -26,6 +26,26 @@ export function sanitizePhone(phone: string): string {
   return phone.replace(/\D/g, '')
 }
 
+export function resolveProductImageUrl(imagePath: string, baseUrl?: string): string | null {
+  const trimmed = imagePath.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  const origin =
+    baseUrl ??
+    (typeof window !== 'undefined' && window.location ? window.location.origin : undefined)
+
+  if (!origin || !/^https?:\/\//i.test(origin)) {
+    return null
+  }
+
+  const normalizedOrigin = origin.replace(/\/+$/, '')
+  const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+  return `${normalizedOrigin}${normalizedPath}`
+}
+
 export function buildSingleProductMessage(
   product: Product,
   quantity: number = 1,
@@ -33,12 +53,14 @@ export function buildSingleProductMessage(
 ): string {
   const safeQty = Math.max(1, Math.floor(quantity))
   const total = product.price * safeQty
+
   const lines: string[] = [
-    `Hola *${storeConfig.brandName}*, me gustaría solicitar este producto:`,
-    '',
-    `• ${safeQty}x ${product.title} — ${formatPrice(product.price)} c/u (Subtotal: ${formatPrice(total)})`,
-    '',
-    `*Total estimado:* ${formatPrice(total)}`,
+    `*${storeConfig.brandName} · Pedido*`,
+    '────────────────────',
+    `• *${safeQty}x ${product.title}*`,
+    `  ${formatPrice(product.price)} c/u — Subtotal: *${formatPrice(total)}*`,
+    '────────────────────',
+    `*Total estimado:* *${formatPrice(total)}*`,
   ]
 
   const trimmedName = customerName?.trim()
@@ -46,7 +68,11 @@ export function buildSingleProductMessage(
     lines.push(`*Nombre:* ${trimmedName}`)
   }
 
-  lines.push('', '¿Me confirmas disponibilidad y métodos de pago? ¡Gracias!')
+  lines.push(
+    '',
+    '_Te envío la tarjeta visual con la foto de mi pedido._',
+    '¿Me confirmas disponibilidad y métodos de pago? ¡Gracias!',
+  )
   return lines.join('\n')
 }
 
@@ -76,18 +102,19 @@ export function buildCartOrderMessage(
   }
 
   const lines: string[] = [
-    `Hola *${storeConfig.brandName}*, quiero realizar el siguiente pedido del catálogo:`,
-    '',
+    `*${storeConfig.brandName} · Resumen de Pedido*`,
+    '────────────────────',
   ]
 
   for (const item of items) {
     const lineTotal = item.product.price * item.quantity
+    lines.push(`• *${item.quantity}x ${item.product.title}*`)
     lines.push(
-      `• ${item.quantity}x ${item.product.title} (${formatPrice(item.product.price)} c/u) = ${formatPrice(lineTotal)}`,
+      `  ${formatPrice(item.product.price)} c/u — Subtotal: *${formatPrice(lineTotal)}*`,
     )
   }
 
-  lines.push('', `*Total estimado:* ${formatPrice(total)}`)
+  lines.push('────────────────────', `*Total estimado:* *${formatPrice(total)}*`)
 
   const trimmedName = options?.customerName?.trim()
   if (trimmedName) {
@@ -99,7 +126,11 @@ export function buildCartOrderMessage(
     lines.push(`*Nota de entrega:* ${trimmedNote}`)
   }
 
-  lines.push('', '¿Me confirmas disponibilidad para coordinar la compra? ¡Gracias!')
+  lines.push(
+    '',
+    '_Te envío la tarjeta visual con las fotos de mis artículos._',
+    '¿Me confirmas disponibilidad para coordinar la compra? ¡Gracias!',
+  )
   return lines.join('\n')
 }
 

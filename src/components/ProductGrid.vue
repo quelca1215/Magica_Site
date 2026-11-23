@@ -2,6 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ProductCard from '@/components/ProductCard.vue'
 import { gsap, prefersReducedMotion } from '@/composables/useGsap'
+import { useIntro } from '@/composables/useIntro'
 import type { Product } from '@/types/catalog'
 
 interface Props {
@@ -17,9 +18,10 @@ const emit = defineEmits<{
 }>()
 
 const gridRef = ref<HTMLElement | null>(null)
+const { isIntroRevealed } = useIntro()
 let ctx: gsap.Context | undefined
 
-function animateCards() {
+function animateCards(delay = 0) {
   if (!gridRef.value || prefersReducedMotion()) return
 
   const cards = gridRef.value.querySelectorAll('.product-card-slot')
@@ -37,6 +39,7 @@ function animateCards() {
         y: 0,
         scale: 1,
         duration: 0.44,
+        delay,
         stagger: 0.045,
         ease: 'power3.out',
         clearProps: 'transform,opacity',
@@ -46,7 +49,16 @@ function animateCards() {
 }
 
 onMounted(() => {
-  animateCards()
+  if (isIntroRevealed.value || prefersReducedMotion()) {
+    animateCards()
+  }
+})
+
+watch(isIntroRevealed, async (revealed) => {
+  if (revealed) {
+    await nextTick()
+    animateCards(0.42)
+  }
 })
 
 watch(

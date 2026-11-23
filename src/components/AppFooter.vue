@@ -1,10 +1,46 @@
 <script setup lang="ts">
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import BrandLogo from '@/components/BrandLogo.vue'
+import { gsap, prefersReducedMotion } from '@/composables/useGsap'
+import { useIntro } from '@/composables/useIntro'
 import { storeConfig } from '@/config/store'
+
+const footerRef = ref<HTMLElement | null>(null)
+const { isIntroRevealed } = useIntro()
+let ctx: gsap.Context | undefined
+
+watch(isIntroRevealed, async (revealed) => {
+  if (!revealed || !footerRef.value || prefersReducedMotion()) return
+
+  await nextTick()
+
+  if (!ctx) {
+    ctx = gsap.context(() => {}, footerRef.value)
+  }
+
+  ctx.add(() => {
+    gsap.fromTo(
+      footerRef.value,
+      { autoAlpha: 0, y: 18 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.65,
+        delay: 0.45,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility',
+      },
+    )
+  })
+})
+
+onUnmounted(() => {
+  ctx?.revert()
+})
 </script>
 
 <template>
-  <footer class="app-footer">
+  <footer ref="footerRef" class="app-footer" :class="{ 'is-intro-hidden': !isIntroRevealed }">
     <div class="container app-footer__inner">
       <div class="app-footer__brand">
         <BrandLogo size="footer" />

@@ -3,22 +3,126 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { gsap, prefersReducedMotion } from '@/composables/useGsap'
 import { CATEGORY_MAP } from '@/data/products'
 import { useCartStore } from '@/stores/cart'
+import {
+  copyBlobToClipboard,
+  downloadBlob,
+  generateOrderCardBlob,
+  shareOrDownloadOrderCard,
+} from '@/utils/orderCardCanvas'
 import { formatPrice } from '@/utils/whatsapp'
 
 const cart = useCartStore()
 const drawerRef = ref<HTMLElement | null>(null)
 const backdropRef = ref<HTMLElement | null>(null)
 const copied = ref(false)
+const isGeneratingImage = ref(false)
+const feedbackMessage = ref<string | null>(null)
+const previewImageUrl = ref<string | null>(null)
+const previewBlob = ref<Blob | null>(null)
+const imageCopied = ref(false)
 
 let drawerCtx: gsap.Context | undefined
 let copyTimer: ReturnType<typeof setTimeout> | undefined
+let feedbackTimer: ReturnType<typeof setTimeout> | undefined
 
 const whatsappButtonLabel = computed(() => {
-  if (cart.totalItems === 1) {
-    return 'Solicitar 1 producto por WhatsApp'
+  if (isGeneratingImage.value) {
+    return 'Preparando tarjetas con fotos...'
   }
-  return `Solicitar pedido (${cart.totalItems} items) por WhatsApp`
+  if (cart.totalItems === 1) {
+    return 'Preparar pedido con foto para WhatsApp'
+  }
+  return `Preparar pedido (${cart.totalItems} items) con fotos`
 })
+
+function closePreview() {
+  if (previewImageUrl.value && typeof URL !== 'undefined') {
+    URL.revokeObjectURL(previewImageUrl.value)
+  }
+  previewImageUrl.value = null
+  previewBlob.value = null
+  imageCopied.value = false
+}
+
+function setFeedback(message: string) {
+  feedbackMessage.value = message
+  if (feedbackTimer) clearTimeout(feedbackTimer)
+  feedbackTimer = setTimeout(() => {
+    feedbackMessage.value = null
+  }, 6500)
+}
+
+async function prepareOrderPreview() {
+  if (isGeneratingImage.value || cart.isEmpty) return
+
+  isGeneratingImage.value = true
+  try {
+    const blob = await generateOrderCardBlob(cart.items, cart.subtotal, {
+      customerName: cart.customerName,
+      note: cart.orderNote,
+    })
+
+    closePreview()
+    previewBlob.value = blob
+    if (typeof URL !== 'undefined') {
+      previewImageUrl.value = URL.createObjectURL(blob)
+    }
+    imageCopied.value = await copyBlobToClipboard(blob)
+  } catch {
+    setFeedback('No se pudo generar la tarjeta visual. Puedes abrir WhatsApp directamente.')
+    if (typeof window !== 'undefined') {
+      window.open(cart.whatsappOrderUrl, '_blank', 'noopener,noreferrer')
+    }
+  } finally {
+    isGeneratingImage.value = false
+  }
+}
+
+function openWhatsAppFromPreview() {
+  if (typeof window !== 'undefined') {
+    window.open(cart.whatsappOrderUrl, '_blank', 'noopener,noreferrer')
+  }
+}
+
+async function handleShareOrDownloadPreview() {
+  if (isGeneratingImage.value || cart.isEmpty) return
+
+  isGeneratingImage.value = true
+  try {
+    const blob =
+      previewBlob.value ??
+      (await generateOrderCardBlob(cart.items, cart.subtotal, {
+        customerName: cart.customerName,
+        note: cart.orderNote,
+      }))
+    const result = await shareOrDownloadOrderCard(blob, cart.orderMessage)
+    if (result === 'downloaded') {
+      setFeedback('Imagen guardada como "pedido-magica.png" para adjuntar en WhatsApp.')
+    }
+  } catch {
+    setFeedback('No se pudo exportar la imagen en este dispositivo.')
+  } finally {
+    isGeneratingImage.value = false
+  }
+}
+
+async function handleDirectDownload() {
+  if (isGeneratingImage.value || cart.isEmpty) return
+
+  isGeneratingImage.value = true
+  try {
+    const blob = await generateOrderCardBlob(cart.items, cart.subtotal, {
+      customerName: cart.customerName,
+      note: cart.orderNote,
+    })
+    downloadBlob(blob, 'pedido-magica.png')
+    setFeedback('Tarjeta visual descargada como "pedido-magica.png".')
+  } catch {
+    setFeedback('No se pudo descargar la imagen.')
+  } finally {
+    isGeneratingImage.value = false
+  }
+}
 
 async function copySummary() {
   if (typeof navigator === 'undefined' || !navigator.clipboard) return
@@ -47,7 +151,9 @@ watch(
       document.body.style.overflow = open ? 'hidden' : ''
     }
 
-    if (open) {
+    if (!open) {
+      closePreview()
+    } else {
       await nextTick()
       if (prefersReducedMotion()) return
 
@@ -73,8 +179,10 @@ if (typeof window !== 'undefined') {
 }
 
 onUnmounted(() => {
+  closePreview()
   drawerCtx?.revert()
   if (copyTimer) clearTimeout(copyTimer)
+  if (feedbackTimer) clearTimeout(feedbackTimer)
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleKeydown)
   }
@@ -158,6 +266,74 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <template v-else-if="previewImageUrl">
+          <div class="drawer-scroll drawer-preview-scroll">
+            <div class="preview-header-row">
+              <div>
+                <h3 class="preview-title">Tarjeta visual de tu pedido</h3>
+                <p class="preview-subtitle">
+                  {{
+                    imageCopied
+                      ? 'Imagen copiada al portapapeles. En WhatsApp solo presiona Ctrl+V / Pegar.'
+                      : 'Descarga o comparte esta tarjeta para que el vendedor vea las fotos.'
+                  }}
+                </p>
+              </div>
+              <button type="button" class="preview-back-btn" @click="closePreview">
+                Editar carrito
+              </button>
+            </div>
+
+            <div class="preview-card-frame">
+              <img
+                :src="previewImageUrl"
+                alt="Vista previa estética del pedido con fotos"
+                class="preview-card-img"
+              />
+            </div>
+          </div>
+
+          <div class="drawer-footer">
+            <p v-if="feedbackMessage" class="drawer-feedback" role="status" aria-live="polite">
+              {{ feedbackMessage }}
+            </p>
+
+            <button type="button" class="drawer-whatsapp-cta" @click="openWhatsAppFromPreview">
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+                />
+              </svg>
+              <span>Abrir WhatsApp {{ imageCopied ? '(y pegar imagen)' : '' }}</span>
+            </button>
+
+            <div class="drawer-secondary-actions">
+              <button
+                type="button"
+                class="drawer-copy-btn"
+                :disabled="isGeneratingImage"
+                @click="handleShareOrDownloadPreview"
+              >
+                Compartir / Guardar imagen
+              </button>
+
+              <button type="button" class="drawer-copy-btn" @click="closePreview">
+                Volver al carrito
+              </button>
+            </div>
+          </div>
+        </template>
+
         <template v-else>
           <div class="drawer-scroll">
             <ul class="cart-list">
@@ -229,28 +405,6 @@ onUnmounted(() => {
                 </div>
               </li>
             </ul>
-
-            <div class="order-notes">
-              <label class="field-group">
-                <span class="field-group__label">Tu nombre (opcional)</span>
-                <input
-                  v-model="cart.customerName"
-                  type="text"
-                  class="field-group__input"
-                  placeholder="Ej. Sofía Martínez"
-                />
-              </label>
-
-              <label class="field-group">
-                <span class="field-group__label">Nota o dirección de envío (opcional)</span>
-                <textarea
-                  v-model="cart.orderNote"
-                  rows="2"
-                  class="field-group__textarea"
-                  placeholder="Ej. Envolver para regalo o entrega en..."
-                ></textarea>
-              </label>
-            </div>
           </div>
 
           <div class="drawer-footer">
@@ -266,11 +420,15 @@ onUnmounted(() => {
               </button>
             </div>
 
-            <a
-              :href="cart.whatsappOrderUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+            <p v-if="feedbackMessage" class="drawer-feedback" role="status" aria-live="polite">
+              {{ feedbackMessage }}
+            </p>
+
+            <button
+              type="button"
               class="drawer-whatsapp-cta"
+              :disabled="isGeneratingImage"
+              @click="prepareOrderPreview"
             >
               <svg
                 width="19"
@@ -288,11 +446,22 @@ onUnmounted(() => {
                 />
               </svg>
               <span>{{ whatsappButtonLabel }}</span>
-            </a>
-
-            <button type="button" class="drawer-copy-btn" @click="copySummary">
-              {{ copied ? '¡Resumen copiado al portapapeles!' : 'Copiar resumen del pedido' }}
             </button>
+
+            <div class="drawer-secondary-actions">
+              <button
+                type="button"
+                class="drawer-copy-btn"
+                :disabled="isGeneratingImage"
+                @click="handleDirectDownload"
+              >
+                Descargar imagen
+              </button>
+
+              <button type="button" class="drawer-copy-btn" @click="copySummary">
+                {{ copied ? '¡Texto copiado!' : 'Copiar texto' }}
+              </button>
+            </div>
           </div>
         </template>
       </aside>
@@ -662,27 +831,111 @@ onUnmounted(() => {
     transform 0.15s ease;
 }
 
-.drawer-whatsapp-cta:hover {
+.drawer-whatsapp-cta:hover:not(:disabled) {
   background: var(--color-4);
   color: var(--color-5);
   transform: translateY(-1px);
 }
 
+.drawer-whatsapp-cta:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.drawer-feedback {
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-2);
+  border: 1px solid var(--color-3);
+  color: var(--color-5);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.drawer-secondary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
 .drawer-copy-btn {
   height: 40px;
+  padding: 0 0.7rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-subtle);
   background: var(--color-2);
   color: var(--color-5);
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 600;
   transition:
     border-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.drawer-copy-btn:hover {
+.drawer-copy-btn:hover:not(:disabled) {
   border-color: var(--color-4);
   color: var(--color-5);
+}
+
+.drawer-copy-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.drawer-preview-scroll {
+  gap: 1rem;
+}
+
+.preview-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.preview-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.preview-subtitle {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--ink-secondary);
+  line-height: 1.4;
+}
+
+.preview-back-btn {
+  flex-shrink: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.preview-back-btn:hover {
+  border-color: var(--color-4);
+  background: var(--color-3);
+}
+
+.preview-card-frame {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  padding: 0.5rem;
+  box-shadow: var(--shadow-card);
+}
+
+.preview-card-img {
+  width: 100%;
+  height: auto;
+  border-radius: calc(var(--radius-md) - 4px);
+  display: block;
 }
 </style>

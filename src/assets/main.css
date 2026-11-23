@@ -28,3 +28,7 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+.is-intro-hidden {
+  display: none !important;
+}

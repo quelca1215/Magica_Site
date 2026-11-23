@@ -17,7 +17,7 @@ export const storeConfig = {
    * Número de celular de WhatsApp con código de país (sin '+' ni espacios).
    * Ejemplo: '573001234567' (Colombia), '5215512345678' (México), '34600123456' (España).
    */
-  whatsappPhone: '71289102',
-  currency: 'USD',
+  whatsappPhone: '75224335',
+  currency: 'BOL',
   locale: 'es-US',
 } as const

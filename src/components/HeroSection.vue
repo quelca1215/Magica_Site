@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { canAnimateSvg, gsap, prefersReducedMotion } from '@/composables/useGsap'
+import { useIntro } from '@/composables/useIntro'
 import { storeConfig } from '@/config/store'
 
 interface Props {
@@ -12,30 +13,91 @@ interface Props {
 defineProps<Props>()
 
 const heroRef = ref<HTMLElement | null>(null)
+const logoStageRef = ref<HTMLElement | null>(null)
+const { isIntroRevealed, startIntro, completeIntro } = useIntro()
 let ctx: gsap.Context | undefined
 
 onMounted(() => {
-  if (!heroRef.value || prefersReducedMotion()) return
+  if (!heroRef.value || prefersReducedMotion()) {
+    completeIntro()
+    return
+  }
+
+  startIntro()
+
+  const loaderScale = typeof window !== 'undefined' && window.innerWidth < 640 ? 1.18 : 1.38
+
+  async function revealPage() {
+    const stageEl = logoStageRef.value
+    const firstRect = stageEl?.getBoundingClientRect()
+
+    completeIntro()
+    await nextTick()
+
+    const lastRect = stageEl?.getBoundingClientRect()
+    const deltaY =
+      firstRect && lastRect && firstRect.height > 0 && lastRect.height > 0
+        ? firstRect.top + firstRect.height / 2 - (lastRect.top + lastRect.height / 2)
+        : 0
+
+    ctx?.add(() => {
+      if (stageEl) {
+        gsap.fromTo(
+          stageEl,
+          { y: deltaY, scale: loaderScale },
+          {
+            y: 0,
+            scale: 1,
+            duration: 0.95,
+            ease: 'power3.inOut',
+            clearProps: 'transform',
+          },
+        )
+      }
+
+      gsap.fromTo(
+        '.hero-stagger',
+        { autoAlpha: 0, y: 26 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.65,
+          delay: 0.35,
+          stagger: 0.1,
+          ease: 'power3.out',
+          clearProps: 'transform,opacity,visibility',
+        },
+      )
+    })
+  }
 
   ctx = gsap.context(() => {
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+    gsap.to('.hero-logo-float', {
+      y: -10,
+      duration: 2.2,
+      repeat: -1,
+      yoyo: true,
+      ease: 'sine.inOut',
+    })
 
-    tl.from('.hero-logo-stage', {
-      scale: 0.82,
-      opacity: 0,
-      duration: 0.75,
-      ease: 'expo.out',
-    }).from(
+    const tl = gsap.timeline()
+
+    tl.fromTo(
+      '.hero-logo-stage',
+      { scale: 0.65, autoAlpha: 0 },
+      { scale: loaderScale, autoAlpha: 1, duration: 0.85, ease: 'expo.out' },
+      0,
+    ).from(
       '.hero-logo-orbit',
       {
-        scale: 0.86,
+        scale: 0.82,
         opacity: 0,
-        rotation: -12,
-        duration: 0.85,
+        rotation: -18,
+        duration: 0.9,
         ease: 'power3.out',
         clearProps: 'transform,opacity',
       },
-      '-=0.55',
+      0.15,
     )
 
     if (canAnimateSvg() && heroRef.value?.querySelector('.logo-stroke-a')) {
@@ -47,7 +109,7 @@ onMounted(() => {
           transformOrigin: 'center center',
           duration: 0.55,
         },
-        '-=0.45',
+        0.3,
       )
         .from(
           '.logo-stroke-b',
@@ -57,7 +119,7 @@ onMounted(() => {
             transformOrigin: 'center center',
             duration: 0.55,
           },
-          '-=0.42',
+          0.35,
         )
         .from(
           '.logo-glint',
@@ -68,49 +130,49 @@ onMounted(() => {
             duration: 0.45,
             ease: 'back.out(2.2)',
           },
-          '-=0.25',
+          0.55,
         )
     }
 
-    tl.from(
-      '.hero-stagger',
+    tl.fromTo(
+      '.hero-logo-spin',
+      { rotationY: 0 },
       {
-        y: 20,
-        opacity: 0,
-        duration: 0.55,
-        stagger: 0.08,
-        clearProps: 'transform,opacity',
+        rotationY: -360,
+        duration: 2.65,
+        ease: 'power2.inOut',
+        transformOrigin: 'center center',
+        clearProps: 'transform',
       },
-      '-=0.45',
-    )
-
-    gsap.to('.hero-logo-float', {
-      y: -7,
-      duration: 2.8,
-      repeat: -1,
-      yoyo: true,
-      ease: 'sine.inOut',
-    })
+      0.35,
+    ).call(() => {
+      void revealPage()
+    }, undefined, 3)
   }, heroRef.value)
 })
 
 onUnmounted(() => {
   ctx?.revert()
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = ''
+  }
 })
 </script>
 
 <template>
-  <section id="top" ref="heroRef" class="hero">
+  <section id="top" ref="heroRef" class="hero" :class="{ 'hero--loader': !isIntroRevealed }">
     <div class="hero__glow hero__glow--pink" aria-hidden="true"></div>
     <div class="hero__glow hero__glow--lavender" aria-hidden="true"></div>
 
     <div class="container hero__inner">
       <!-- Protagonist Logo -->
-      <div class="hero-logo-stage">
+      <div ref="logoStageRef" class="hero-logo-stage">
         <div class="hero-logo-wrap">
           <div class="hero-logo-orbit" aria-hidden="true"></div>
           <div class="hero-logo-float">
-            <BrandLogo size="hero" animated />
+            <div class="hero-logo-spin">
+              <BrandLogo size="hero" animated />
+            </div>
           </div>
         </div>
         <span v-if="!storeConfig.logoImageUrl" class="hero-logo-caption"
@@ -119,7 +181,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Minimalist Editorial Headline -->
-      <div class="hero__content">
+      <div class="hero__content" :class="{ 'is-intro-hidden': !isIntroRevealed }">
         <h1 class="hero__title hero-stagger">
           Productos <span class="hero__title-accent">con </span> zzzzz
         </h1>
@@ -172,6 +234,19 @@ onUnmounted(() => {
   background: linear-gradient(180deg, var(--color-1) 0%, var(--color-2) 100%);
 }
 
+.hero--loader {
+  min-height: 100dvh;
+  padding: 0;
+  border-bottom-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero--loader .hero__inner {
+  gap: 0;
+}
+
 .hero__glow {
   position: absolute;
   border-radius: 50%;
@@ -218,6 +293,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  perspective: 1000px;
 }
 
 .hero-logo-orbit {
@@ -232,6 +308,11 @@ onUnmounted(() => {
 .hero-logo-float {
   position: relative;
   z-index: 1;
+}
+
+.hero-logo-spin {
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .hero-logo-caption {

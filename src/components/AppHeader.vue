@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { gsap, prefersReducedMotion } from '@/composables/useGsap'
+import { useIntro } from '@/composables/useIntro'
 import { storeConfig } from '@/config/store'
 import { useCartStore } from '@/stores/cart'
 import { buildCartOrderMessage, buildWhatsAppUrl, formatPrice } from '@/utils/whatsapp'
@@ -10,6 +11,7 @@ const cart = useCartStore()
 const headerBarRef = ref<HTMLElement | null>(null)
 const badgeRef = ref<HTMLElement | null>(null)
 const isScrolled = ref(false)
+const { isIntroRevealed } = useIntro()
 
 let headerCtx: gsap.Context | undefined
 
@@ -44,7 +46,7 @@ onMounted(() => {
     window.addEventListener('scroll', handleScroll, { passive: true })
   }
 
-  if (headerBarRef.value && !prefersReducedMotion()) {
+  if (headerBarRef.value && !prefersReducedMotion() && isIntroRevealed.value) {
     headerCtx = gsap.context(() => {
       gsap.fromTo(
         headerBarRef.value,
@@ -53,6 +55,31 @@ onMounted(() => {
       )
     })
   }
+})
+
+watch(isIntroRevealed, async (revealed) => {
+  if (!revealed || !headerBarRef.value || prefersReducedMotion()) return
+
+  await nextTick()
+
+  if (!headerCtx) {
+    headerCtx = gsap.context(() => {})
+  }
+
+  headerCtx.add(() => {
+    gsap.fromTo(
+      headerBarRef.value,
+      { y: -16, autoAlpha: 0 },
+      {
+        y: 0,
+        autoAlpha: 1,
+        duration: 0.6,
+        delay: 0.35,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility',
+      },
+    )
+  })
 })
 
 onUnmounted(() => {
@@ -76,7 +103,7 @@ watch(
 </script>
 
 <template>
-  <header class="app-header" :class="{ 'is-scrolled': isScrolled }">
+  <header class="app-header" :class="{ 'is-scrolled': isScrolled, 'is-intro-hidden': !isIntroRevealed }">
     <div ref="headerBarRef" class="app-header__bar">
       <a href="#top" class="brand-link">
         <BrandLogo size="sm" />

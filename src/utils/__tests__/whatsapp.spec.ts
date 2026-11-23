@@ -6,6 +6,7 @@ import {
   buildWhatsAppUrl,
   formatPrice,
   normalizeText,
+  resolveProductImageUrl,
   sanitizePhone,
 } from '@/utils/whatsapp'
 
@@ -54,5 +55,32 @@ describe('whatsapp & catalog utils', () => {
   it('builds a valid wa.me URL with encoded text', () => {
     const url = buildWhatsAppUrl('+57 300 111 2233', 'Hola Mágica')
     expect(url).toBe('https://wa.me/573001112233?text=Hola%20M%C3%A1gica')
+  })
+
+  it('resolves product image URLs against a base origin or preserves absolute URLs', () => {
+    expect(resolveProductImageUrl('/images/products/vela-peonia.jpg', 'https://magica.shop')).toBe(
+      'https://magica.shop/images/products/vela-peonia.jpg',
+    )
+    expect(resolveProductImageUrl('https://cdn.example.com/foto.png')).toBe(
+      'https://cdn.example.com/foto.png',
+    )
+  })
+
+  it('formats clean aesthetic cart messages without replacement characters or localhost links', () => {
+    const first = PRODUCTS[0]!
+    const second = PRODUCTS[1]!
+    const message = buildCartOrderMessage(
+      [
+        { product: first, quantity: 1 },
+        { product: second, quantity: 2 },
+      ],
+      first.price + second.price * 2,
+    )
+
+    expect(message).toContain('*MÁGICA · Resumen de Pedido*')
+    expect(message).toContain(`*1x ${first.title}*`)
+    expect(message).toContain(`*2x ${second.title}*`)
+    expect(message).not.toContain('localhost')
+    expect(message).not.toContain('\uFFFD')
   })
 })

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import CatalogFilters from '@/components/CatalogFilters.vue'
 import HeroSection from '@/components/HeroSection.vue'
 import ProductDetailModal from '@/components/ProductDetailModal.vue'
 import ProductGrid from '@/components/ProductGrid.vue'
+import { gsap, prefersReducedMotion } from '@/composables/useGsap'
+import { useIntro } from '@/composables/useIntro'
 import { CATEGORY_MAP, PRODUCT_CATEGORIES, PRODUCTS } from '@/data/products'
 import type { Product, ProductCategoryId, SortOption } from '@/types/catalog'
 import { normalizeText } from '@/utils/whatsapp'
@@ -12,6 +14,38 @@ const searchQuery = ref('')
 const selectedCategory = ref<'all' | ProductCategoryId>('all')
 const sortBy = ref<SortOption>('featured')
 const selectedProduct = ref<Product | null>(null)
+const catalogSectionRef = ref<HTMLElement | null>(null)
+const { isIntroRevealed } = useIntro()
+let ctx: gsap.Context | undefined
+
+watch(isIntroRevealed, async (revealed) => {
+  if (!revealed || !catalogSectionRef.value || prefersReducedMotion()) return
+
+  await nextTick()
+
+  if (!ctx) {
+    ctx = gsap.context(() => {}, catalogSectionRef.value)
+  }
+
+  ctx.add(() => {
+    gsap.fromTo(
+      catalogSectionRef.value,
+      { autoAlpha: 0, y: 36 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.75,
+        delay: 0.38,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity,visibility',
+      },
+    )
+  })
+})
+
+onUnmounted(() => {
+  ctx?.revert()
+})
 
 const categoryCounts = computed<Record<ProductCategoryId, number>>(() => {
   const counts: Record<ProductCategoryId, number> = {
@@ -72,7 +106,12 @@ function resetFilters() {
   <div class="catalog-page">
     <HeroSection :total-products="PRODUCTS.length" :total-categories="PRODUCT_CATEGORIES.length" />
 
-    <section id="catalogo" class="catalog-section">
+    <section
+      id="catalogo"
+      ref="catalogSectionRef"
+      class="catalog-section"
+      :class="{ 'is-intro-hidden': !isIntroRevealed }"
+    >
       <div class="container catalog-section__inner">
         <div class="catalog-heading">
           <div>
